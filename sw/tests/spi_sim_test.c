@@ -23,11 +23,15 @@ int main(void) {
     char txbuf[5] = {0};
     char rxbuf[8] = {0};
     txbuf[0] = 0x13;
+    txbuf[1] = 0x00;
+    txbuf[2] = 0x00;
+    txbuf[3] = 0x50;
+    txbuf[4] = 0x00;
 
     init_uart(200000000, 115200);
     uart_initialized = 1;
 
-    opentitan_qspi_init((volatile unsigned int *)&__base_spim, 50000000, 25000000, &spi);
+    opentitan_qspi_init((volatile unsigned int *)&__base_spim, 200000000, 25000000, 1, &spi);
 
     opentitan_qspi_probe(&spi);
 

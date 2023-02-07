@@ -12,11 +12,11 @@ module tb_cheshire_soc;
   string binary;
   longint entry_int;
   logic [63:0] entry;
-  int          exit_status = 0;
+  int exit_status = 0;
 
   initial begin
 
-    fix.set_bootmode(3);
+    fix.set_bootmode(2);
     fix.set_testmode(0);
  
     fix.wait_for_reset();
@@ -35,11 +35,20 @@ module tb_cheshire_soc;
       entry = cheshire_pkg::SpmBase;
     end
 
+    // Wait for LLC BIST to finish
+    #8us;
+
     fix.jtag_init();
 
     fix.jtag_cfg_llc_spm();
 
+    // Randomize the SPM
+    //fix.sl_rand(cheshire_pkg::SpmBase + 48'h0000_5000, 64'h0000_1000);
+
     fix.sl_preload();
+
+    // Preload memory of I2C EEPROM
+    $readmemh("../models/24FC1025.mem", fix.i_i2c_model.MemoryBlock);
 
     // Preload the sections from an ELF file
     //fix.jtag_preload();
@@ -49,6 +58,9 @@ module tb_cheshire_soc;
 
     // Run from entrypoint
     fix.jtag_run(entry);
+
+    // Use idle boot mode to start system
+    //fix.jtag_idle_boot(entry);
 
     // Wait for the application to write the return value to the first scratch register
     fix.jtag_wait_for_eoc(cheshire_pkg::ScratchRegsBase + 64'h4, exit_status);

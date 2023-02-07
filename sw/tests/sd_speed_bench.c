@@ -55,7 +55,7 @@ int main(void) {
     uart_initialized = 1;
 
     // Setup the SPI Host
-    opentitan_qspi_init((volatile unsigned int *)&__base_spim, 50000000, 25000000, &spi);
+    opentitan_qspi_init((volatile unsigned int *)&__base_spim, 50000000, 25000000, 0, &spi);
 
     opentitan_qspi_probe(&spi);
 
@@ -85,7 +85,7 @@ int main(void) {
         //}
 
         // Copy check pattern to DRAM
-        ret = sd_copy_blocks(&spi, BENCH_LBA, (unsigned char *)0x80000000, BENCH_LEN);
+        ret = sd_read_blocks(&spi, BENCH_LBA, (unsigned char *)0x80000000, BENCH_LEN);
 
         printf("----- Check pattern copied with return value %d. Verifying... -----\r\n", ret);
 
