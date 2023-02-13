@@ -1,0 +1,504 @@
+# Copyright 2023 ETH Zurich and University of Bologna.
+# Solderpad Hardware License, Version 0.51, see LICENSE for details.
+# SPDX-License-Identifier: SHL-0.51
+# Licensed under Solderpad Hardware License, Version 0.51, see LICENSE for details.
+#
+# Nicole Narr <narrn@student.ethz.ch>
+# Christopher Reinwardt <creinwar@student.ethz.ch>
+
+name: cheshire_padframe_sim
+manifest_version: 3
+pad_domains:
+  - name: main
+    pad_types: 
+      - name: func_pdu
+        description: Functional model of a TSMC65 Dual-Driving Regular I/O Cell with Enable-Controlled Pull-Up Resistor
+        template: |
+          func_pad #(
+            .PullUpOrDown(1'b1)
+            ) ${instance_name} (
+            .pad_io(${conn["pad"]}),
+            .pe_i(1'(${conn["pull_en"]})),
+            .ie_i(1'(${conn["input_en"]})),
+            .c_o(${conn["pad2chip"]}),
+            .ds_i(1'(${conn["driving_strength"]})),
+            .i_i(1'(${conn["chip2pad"]})),
+            .oen_i(1'(${conn["output_en_n"]}))
+          );
+        pad_signals: &func_pdu_pad_signals 
+          - name: pad 
+            size: 1
+            kind: pad
+          - name: pull_en
+            description: "Pull up enable"
+            size: 1
+            kind: input
+            conn_type: dynamic
+            default_reset_value: 0
+            default_static_value: 1'b0
+          - name: input_en
+            description: "Input buffer enable"
+            size: 1
+            kind: input
+            conn_type: dynamic
+            default_reset_value: 1
+            default_static_value: 1'b1
+          - name: pad2chip
+            description: "The signal that connects to the pads RX buffer"
+            size: 1
+            kind: output
+            conn_type: dynamic
+            default_static_value: ~
+          - name: driving_strength
+            description: "Driving strength of the output driver"
+            size: 1
+            kind: input
+            conn_type: dynamic
+            default_reset_value: 0
+            default_static_value: 1'b0
+          - name: chip2pad
+            description: "The signal that connects to the pads TX driver"
+            size: 1
+            kind: input
+            conn_type: dynamic
+            default_reset_value: 0
+            default_static_value: 1'b0
+          - name: output_en_n
+            description: "Disables the output driver of the pad" 
+            size: 1 
+            kind: input 
+            conn_type: dynamic 
+            default_reset_value: 1
+            default_static_value: 1'b1
+
+      - name: func_pdd
+        description: Functional model of a TSCM65 Dual-Driving Regular I/O Cell with Enable-Controlled Pull-Down Resistor
+        template: |
+          func_pad #(
+            .PullUpOrDown(1'b0)
+            ) ${instance_name} (
+            .pad_io(${conn["pad"]}),
+            .pe_i(1'(${conn["pull_en"]})),
+            .ie_i(1'(${conn["input_en"]})),
+            .c_o(${conn["pad2chip"]}),
+            .ds_i(1'(${conn["driving_strength"]})),
+            .i_i(1'(${conn["chip2pad"]})),
+            .oen_i(1'(${conn["output_en_n"]}))
+          );
+        pad_signals: &func_pdd_pad_signals 
+          - name: pad 
+            size: 1
+            kind: pad
+          - name: pull_en
+            description: "Pull down enable"
+            size: 1
+            kind: input
+            conn_type: dynamic
+            default_reset_value: 0
+            default_static_value: 1'b0
+          - name: input_en
+            description: "Input buffer enable"
+            size: 1
+            kind: input
+            conn_type: dynamic
+            default_reset_value: 1
+            default_static_value: 1'b1
+          - name: pad2chip
+            description: "The signal that connects to the pads RX buffer"
+            size: 1
+            kind: output
+            conn_type: dynamic
+            default_static_value: ~
+          - name: driving_strength
+            description: "Driving strength of the output driver"
+            size: 1
+            kind: input
+            conn_type: dynamic
+            default_reset_value: 0
+            default_static_value: 1'b0
+          - name: chip2pad
+            description: "The signal that connects to the pads TX driver"
+            size: 1
+            kind: input
+            conn_type: dynamic
+            default_reset_value: 0
+            default_static_value: 1'b0
+          - name: output_en_n
+            description: "Disables the output driver of the pad" 
+            size: 1 
+            kind: input 
+            conn_type: dynamic 
+            default_reset_value: 1
+            default_static_value: 1'b1
+
+    pad_list:
+      - name: core_clk
+        description: "Core clock"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: core_clk_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: ref_clk
+        description: "Reference clock"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: ref_clk_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: reset_n 
+        description: "System reset" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: reset_n_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: testmode
+        description: "Testmode" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: testmode_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: bootmode{i}
+        multiple: 2
+        description: "Bootmode{i}" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: bootmode{i}_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: jtag_tck
+        description: "JTAG clock" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: jtag_tck_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: jtag_trst_n
+        description: "JTAG reset" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: jtag_trst_n_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: jtag_tms
+        description: "JTAG mode set" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: jtag_tms_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: jtag_tdi
+        description: "JTAG data in" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: jtag_tdi_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: jtag_tdo
+        description: "JTAG data out" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b0
+          chip2pad: jtag_tdo_c2p
+          output_en_n: 1'b0
+      - name: uart_rx
+        description: "UART receive" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b1
+          pad2chip: uart_rx_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: uart_tx
+        description: "UART transmit" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b1
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b0
+          chip2pad: uart_tx_c2p
+          output_en_n: 1'b0
+      - name: spim_sck
+        description: "SPIM clock" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b0
+          chip2pad: spim_sck_c2p
+          output_en_n: ~spim_sck_en_c2p
+      - name: spim_csb{i}
+        multiple: 2
+        description: "SPIM Chip Select {i}" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b1
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b0
+          chip2pad: spim_csb{i}_c2p
+          output_en_n: ~spim_csb_en{i}_c2p
+      - name: spim_sd{i}
+        multiple: 4
+        description: "SPIM Chip Data {i}" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b1
+          input_en: ~spim_sd_en{i}_c2p
+          pad2chip: spim_sd{i}_p2c
+          driving_strength: 1'b0
+          chip2pad: spim_sd{i}_c2p
+          output_en_n: ~spim_sd_en{i}_c2p
+      - name: i2c_scl
+        description: "I2C Clock"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b1
+          input_en: ~i2c_scl_en_c2p
+          pad2chip: i2c_scl_p2c
+          driving_strength: 1'b0
+          chip2pad: i2c_scl_c2p
+          output_en_n: ~i2c_scl_en_c2p
+      - name: i2c_sda
+        description: "I2C Data"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b1
+          input_en: ~i2c_sda_en_c2p
+          pad2chip: i2c_sda_p2c
+          driving_strength: 1'b0
+          chip2pad: i2c_sda_c2p
+          output_en_n: ~i2c_sda_en_c2p
+      - name: ddr_link_clk_in
+        description: 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b1
+          input_en: 1'b1
+          pad2chip: ddr_link_clk_in_p2c
+          driving_strength: 1'b1
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: ddr_link_clk_out
+        description: "DDR Link Clock Output"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b1
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad: ddr_link_clk_out_c2p
+          output_en_n: 1'b0
+      - name: ddr_link_in{i}
+        multiple: 4
+        description: "DDR Link Data In {i}"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          input_en: 1'b1
+          pad2chip: ddr_link_in{i}_p2c
+          driving_strength: 1'b0
+          chip2pad: 1'b0
+          output_en_n: 1'b1
+      - name: ddr_link_out{i}
+        multiple: 4
+        description: "DDR Link Data Out {i}"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad: ddr_link_out{i}_c2p
+          output_en_n: 1'b0
+      - name: vga_hsync
+        description: "VGA Horizontal Sync"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0 
+          driving_strength: 1'b1
+          chip2pad: vga_hsync_c2p
+          output_en_n: 1'b0
+      - name: vga_vsync
+        description: "VGA Vertical Sync"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad: vga_vsync_c2p
+          output_en_n: 1'b0
+      - name: vga_red_{i}
+        multiple: 3
+        description: "VGA Red Bit {i}"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad: vga_red{i}_c2p
+          output_en_n: 1'b0
+      - name: vga_green_{i}
+        multiple: 3
+        description: "VGA Green Bit {i}"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad: vga_green{i}_c2p
+          output_en_n: 1'b0
+      - name: vga_blue_{i}
+        multiple: 2
+        description: "VGA Blue Bit {i}"
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad: vga_blue{i}_c2p
+          output_en_n: 1'b0
+      - name: rpc_clk
+        description: "RPC DRAM Clock" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad:  rpc_clk_c2p
+          output_en_n: 1'b0
+      - name: rpc_clk_n
+        description: "RPC DRAM Clock Negative" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad:  rpc_clk_n_c2p
+          output_en_n: 1'b0
+      - name: rpc_cs_n
+        description: "RPC DRAM Chip Select Negative" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b1
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad:  rpc_cs_n_c2p
+          output_en_n: 1'b0
+      - name: rpc_stb
+        description: "RPC DRAM Multi-Function Pin" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: 1'b0
+          input_en: 1'b0
+          #pad2chip: 1'b0
+          driving_strength: 1'b1
+          chip2pad:  rpc_stb_c2p
+          output_en_n: 1'b0
+      - name: rpc_dqs
+        description: "RPC DRAM Data Strobe" 
+        pad_type: func_pdd
+        is_static: true
+        connections:
+          pull_en: 1'b1
+          input_en: rpc_dqs_ie_c2p
+          pad2chip: rpc_dqs_p2c
+          driving_strength: 1'b1
+          chip2pad:  rpc_dqs_c2p
+          output_en_n: ~rpc_dqs_oe_c2p
+      - name: rpc_dqs_n
+        description: "RPC DRAM Data Strobe Negative" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: rpc_dqs_pe_c2p
+          input_en: rpc_dqs_ie_c2p
+          pad2chip: rpc_dqs_n_p2c
+          driving_strength: 1'b1
+          chip2pad:  rpc_dqs_n_c2p
+          output_en_n: ~rpc_dqs_oe_c2p
+      - name: rpc_db{i}
+        multiple: 16
+        description: "RPC DRAM Data Bus{i}" 
+        pad_type: func_pdu
+        is_static: true
+        connections:
+          pull_en: rpc_db_pe_c2p
+          input_en: rpc_db_ie_c2p
+          pad2chip: rpc_db{i}_p2c
+          driving_strength: 1'b1
+          chip2pad:  rpc_db{i}_c2p
+          output_en_n: ~rpc_db_oe_c2p

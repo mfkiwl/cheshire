@@ -1,13 +1,13 @@
-// Copyright 2022 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
 // Nicole Narr <narrn@student.ethz.ch>
 // Christopher Reinwardt <creinwar@student.ethz.ch>
 
-module tb_cheshire_soc;
+module tb_cheshire_chip;
 
-  fixture_cheshire_soc fix();
+  fixture_cheshire_chip fix();
 
   string  binary;
   longint entry_int;
@@ -16,14 +16,14 @@ module tb_cheshire_soc;
 
   initial begin
 
-    fix.set_bootmode(2);
+    fix.set_bootmode(3);
     fix.set_testmode(0);
  
     fix.wait_for_reset();
 
     // Load binaries into memory (if any)
     if ($value$plusargs("BINARY=%s", binary)) begin
-      $display("[tb_cheshire_soc] BINARY = %s", binary);
+      $display("[tb_cheshire_chip] BINARY = %s", binary);
       fix.load_binary(binary);
 
       // Obtain the entry point from the ELF file
@@ -58,9 +58,6 @@ module tb_cheshire_soc;
 
     // Run from entrypoint
     fix.jtag_run(entry);
-
-    // Use idle boot mode to start system
-    //fix.jtag_idle_boot(entry);
 
     // Wait for the application to write the return value to the first scratch register
     fix.jtag_wait_for_eoc(cheshire_pkg::ScratchRegsBase + 64'h4, exit_status);

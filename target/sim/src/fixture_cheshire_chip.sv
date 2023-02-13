@@ -1,11 +1,11 @@
-// Copyright 2022 ETH Zurich and University of Bologna.
+// Copyright 2023 ETH Zurich and University of Bologna.
 // Solderpad Hardware License, Version 0.51, see LICENSE for details.
 // SPDX-License-Identifier: SHL-0.51
 //
 // Nicole Narr <narrn@student.ethz.ch>
 // Christopher Reinwardt <creinwar@student.ethz.ch>
 
-module fixture_cheshire_soc;
+module fixture_cheshire_chip;
 
   `include "axi/assign.svh"
   `include "axi/typedef.svh"
@@ -13,6 +13,8 @@ module fixture_cheshire_soc;
   `include "register_interface/typedef.svh"
 
   import cheshire_pkg::*;
+  import pkg_cheshire_padframe_sim::*;
+
 
   /////////////////////////////
   // ELFLoader C++ functions //
@@ -108,6 +110,7 @@ module fixture_cheshire_soc;
   );
     testmode = mode;
   endtask
+
 
   ///////////////////
   // ELF Importing //
@@ -368,67 +371,6 @@ module fixture_cheshire_soc;
     $display("[JTAG] Resuming hart 0 from 0x%h", start_addr);
   endtask
 
-  // Run HART 0 from specified address
-  task jtag_idle_boot(
-    input logic [63:0] start_addr
-  );
-    automatic dm::sbcs_t sbcs = jtag_init_sbcs;
-    automatic logic [31:0] data;
-
-    // Update SBCS
-    sbcs.sbreadonaddr = 0;
-    sbcs.sbreadondata = 0;
-    sbcs.sbautoincrement = 0;
-    sbcs.sbaccess = 3;
-
-    riscv_dbg.write_dmi(dm::SBCS, sbcs);
-    do riscv_dbg.read_dmi_exp_backoff(dm::SBCS, sbcs);
-    while (sbcs.sbbusy);
-
-    $display("[JTAG] Using idle boot bootmethod");
-
-    data = start_addr[31:0];
-
-    // scratch0 = entrypoint
-    riscv_dbg.write_dmi(dm::SBAddress0, RegbusAddrmap[RegbusOutCsr].start_addr[31:0]+32'h4);
-    riscv_dbg.write_dmi(dm::SBData0, data);
-
-    // Wait for the write to complete
-    do riscv_dbg.read_dmi_exp_backoff(dm::SBCS, sbcs);
-    while (sbcs.sbbusy);
-
-    if(sbcs.sberror) begin
-      sbcs.sberror = 1;
-      riscv_dbg.write_dmi(dm::SBCS, sbcs);
-      do riscv_dbg.read_dmi_exp_backoff(dm::SBCS, sbcs);
-      while (sbcs.sbbusy);
-    end
-
-    // scratch1 = 0x1 => start token
-    data = 32'h1;
-    riscv_dbg.write_dmi(dm::SBAddress0, RegbusAddrmap[RegbusOutCsr].start_addr[31:0]+32'h8);
-    riscv_dbg.write_dmi(dm::SBData0, data);
-
-    $display("[JTAG] Providing entrypoint 0x%h", start_addr);
-
-    // Wait for the write to complete
-    do riscv_dbg.read_dmi_exp_backoff(dm::SBCS, sbcs);
-    while (sbcs.sbbusy);
-
-    if(sbcs.sberror) begin
-      sbcs.sberror = 1;
-      riscv_dbg.write_dmi(dm::SBCS, sbcs);
-      do riscv_dbg.read_dmi_exp_backoff(dm::SBCS, sbcs);
-      while (sbcs.sbbusy);
-    end
-
-    sbcs = jtag_init_sbcs;
-    // Ensure the system bus is ready again
-    riscv_dbg.write_dmi(dm::SBCS, sbcs);
-    do riscv_dbg.read_dmi_exp_backoff(dm::SBCS, sbcs);
-    while (sbcs.sbbusy);
-  endtask
-
   task jtag_wait_for_eoc(
     input logic [63:0] poll_addr,
     output int         exit_status
@@ -468,27 +410,13 @@ module fixture_cheshire_soc;
     end
   endtask
 
+
   ///////////////
   // I2C Model //
   ///////////////
 
   // I2C wires
   wire i2c_scl, i2c_sda;
-
-  // I2C logic SoC lines
-  logic i2c_sda_in, i2c_sda_out, i2c_sda_oe;
-  logic i2c_scl_in, i2c_scl_out, i2c_scl_oe;
-
-  // Static pull-ups
-  assign (weak0, weak1) i2c_scl = 1'b1;
-  assign (weak0, weak1) i2c_sda = 1'b1;
-
-  // Bidirectional driver emulation
-  assign i2c_sda_in = (i2c_sda_oe) ? 1'b1 : i2c_sda;
-  assign i2c_scl_in = (i2c_scl_oe) ? 1'b1 : i2c_scl;
-
-  assign i2c_sda = (i2c_sda_oe) ? i2c_sda_out : 1'bz;
-  assign i2c_scl = (i2c_scl_oe) ? i2c_scl_out : 1'bz;
 
   M24FC1025 i_i2c_model (
     .A0     ( 1'b0    ),
@@ -763,7 +691,6 @@ module fixture_cheshire_soc;
     end
   endtask
 
-
   // Randomize memory contents
   task sl_rand(
     input logic [AxiAddrWidth-1:0]  addr,
@@ -804,6 +731,7 @@ module fixture_cheshire_soc;
     end
   endtask
 
+
   //////////
   // DRAM //
   //////////
@@ -841,47 +769,23 @@ module fixture_cheshire_soc;
     .RESP_MAX_WAIT_CYCLES ( 20                            )
   ) dram_axi_rand_slave = new (axi_bus_dram2tb);
 
-
   // Start the rand slave directly from the beginning
   initial begin
     dram_axi_rand_slave.run();
-  end  
-   
-   
+  end
+
+
   ///////////////
   // SPI Model //
   ///////////////
 
-  wire spi_sck, spi_cs_flash, spi_cs_sd;
-  wire spi_miso_sd;
+  wire spi_sck, spi_cs;
   wire [3:0] spi_io;
   wire spi_reset_n;
   wire spi_wp_n;
-  logic spi_sck_soc_out;
-  logic spi_sck_en;
-  logic [3:0] spi_sd_soc_out, spi_sd_soc_in;
-  logic [1:0] spi_cs_soc_out;
-  logic [1:0] spi_cs_en;
-  logic [3:0] spi_sd_en;
 
   assign spi_wp_n = 1'b1;
- 
-  assign spi_sck = spi_sck_en ? spi_sck_soc_out : 1'b0;
-  assign spi_cs_sd    = spi_cs_en[0] ? spi_cs_soc_out[0] : 2'b1;
-  assign spi_cs_flash = spi_cs_en[1] ? spi_cs_soc_out[1] : 2'b1;
 
-  // Pull-ups
-  assign (weak0, weak1) spi_io = 4'b1111;
-
-  assign spi_io[0] = spi_sd_en[0] ? spi_sd_soc_out[0] : 1'bz;
-  assign spi_io[1] = spi_sd_en[1] ? spi_sd_soc_out[1] : 1'bz;
-  assign spi_io[2] = spi_sd_en[2] ? spi_sd_soc_out[2] : 1'bz;
-  assign spi_io[3] = spi_sd_en[3] ? spi_sd_soc_out[3] : 1'bz;
-
-  assign spi_io[1] = spi_cs_sd    ? 1'bz : spi_miso_sd;
-    
-  assign spi_sd_soc_in = spi_io;
-    
   assign spi_reset_n = rst_n;
 
   s25fs512s i_spi_model (
@@ -890,17 +794,9 @@ module fixture_cheshire_soc;
     .SO       ( spi_io[1]   ),
     // Controls
     .SCK      ( spi_sck     ),
-    .CSNeg    ( spi_cs_flash),
+    .CSNeg    ( spi_cs      ),
     .WPNeg    ( spi_wp_n    ),
     .RESETNeg ( spi_reset_n )
-  );
-
-  spi_sd_model i_sd_model (
-    .sclk   ( spi_sck       ),
-    .rstn   ( spi_reset_n   ),
-    .ncs    ( spi_cs_sd     ),
-    .mosi   ( spi_io[0]     ),
-    .miso   ( spi_miso_sd   )
   );
 
 
@@ -920,94 +816,442 @@ module fixture_cheshire_soc;
   );
 
 
-  /////////////////////////
-  // Regbus Error Slaves //
-  /////////////////////////
-
-  reg_a48_d32_req_t external_reg_req;
-  reg_a48_d32_rsp_t external_reg_rsp; 
-   
-  reg_err_slv #(
-    .DW       ( 32                 ),
-    .ERR_VAL  ( 32'hBADCAB1E       ),
-    .req_t    ( reg_a48_d32_req_t  ),
-    .rsp_t    ( reg_a48_d32_rsp_t  )
-  ) i_reg_err_slv_external_reg (
-    .req_i    ( external_reg_req   ),
-    .rsp_o    ( external_reg_rsp   )
-  );
-
-   
   //////////////////
   // Cheshire SoC //
   //////////////////
 
-  cheshire_soc i_dut_cheshire_soc (
-    .clk_i            ( clk_sys         ),
-    .rst_ni           ( rst_n           ),
+  logic core_clk_int;
 
-    .testmode_i       ( testmode        ),
+  logic reset_n_int;
+  logic testmode_int;
+
+  logic [1:0] bootmode_int;
+
+  logic [1:0] spim_csb_int;
+  logic [1:0] spim_csb_en_int;
+  logic spim_sck_int;
+  logic spim_sck_en_int;
+  logic [3:0] spim_sd_out_int;
+  logic [3:0] spim_sd_in_int;
+  logic [3:0] spim_sd_en_int;
+
+  logic uart_rx_int;
+  logic uart_tx_int;
+
+  logic jtag_tdo_int;
+  logic jtag_tck_int;
+  logic jtag_tdi_int;
+  logic jtag_tms_int;
+  logic jtag_trst_n_int;
+
+  logic i2c_scl_out_int;
+  logic i2c_scl_in_int;
+  logic i2c_scl_en_int;
+  logic i2c_sda_out_int;
+  logic i2c_sda_in_int;
+  logic i2c_sda_en_int;
+
+  logic ddr_link_clk_in_int;
+  logic ddr_link_clk_out_int;
+  logic [3:0] ddr_link_in_int;
+  logic [3:0] ddr_link_out_int;
+
+  logic vga_hsync_int;
+  logic vga_vsync_int;
+
+  logic [2:0] vga_red_int;
+  logic [2:0] vga_green_int;
+  logic [1:0] vga_blue_int;
+
+  reg_a48_d32_req_t external_reg_req;
+  reg_a48_d32_rsp_t external_reg_rsp; 
+ 
+
+  cheshire_soc i_dut_cheshire_soc (
+    .clk_i            ( core_clk_int        ),
+    .rst_ni           ( reset_n_int         ),
+
+    .testmode_i       ( testmode_int        ),
 
     // Boot mode selection
-    .boot_mode_i      ( bootmode        ),
+    .boot_mode_i      ( bootmode_int        ),
 
     // Boot address for CVA6
-    .boot_addr_i      ( 64'h0100_0000   ),
+    .boot_addr_i      ( 64'h0100_0000       ),
 
     // DRAM
-    .dram_req_o       ( dram_req        ),
-    .dram_resp_i      ( dram_resp       ),
-                                   
+    .dram_req_o       ( dram_req            ),
+    .dram_resp_i      ( dram_resp           ),
+                                    
     // DDR-Link
-    .ddr_link_i       ( sl_ddr_data_i   ),
-    .ddr_link_o       ( sl_ddr_data_o   ),
-    .ddr_link_clk_i   ( sl_ddr_clk_i    ),
-    .ddr_link_clk_o   ( sl_ddr_clk_o    ),
+    .ddr_link_i       ( ddr_link_in_int      ),
+    .ddr_link_o       ( ddr_link_out_int     ),
+    .ddr_link_clk_i   ( ddr_link_clk_in_int  ),
+    .ddr_link_clk_o   ( ddr_link_clk_out_int ),
 
     // VGA Controller
-    .vga_hsync_o      (                 ),
-    .vga_vsync_o      (                 ),
-    .vga_red_o        (                 ),
-    .vga_green_o      (                 ),
-    .vga_blue_o       (                 ),
+    .vga_hsync_o      ( vga_hsync_int       ),
+    .vga_vsync_o      ( vga_vsync_int       ),
+    .vga_red_o        ( vga_red_int         ),
+    .vga_green_o      ( vga_green_int       ),
+    .vga_blue_o       ( vga_blue_int        ),
 
     // JTAG Interface
-    .jtag_tck_i       ( jtag_tck        ),
-    .jtag_trst_ni     ( jtag_trst_n     ),
-    .jtag_tms_i       ( jtag_tms        ),
-    .jtag_tdi_i       ( jtag_tdi        ),
-    .jtag_tdo_o       ( jtag_tdo        ),
+    .jtag_tck_i       ( jtag_tck_int        ),
+    .jtag_trst_ni     ( jtag_trst_n_int     ),
+    .jtag_tms_i       ( jtag_tms_int        ),
+    .jtag_tdi_i       ( jtag_tdi_int        ),
+    .jtag_tdo_o       ( jtag_tdo_int        ),
 
     // UART Interface
-    .uart_tx_o        ( uart_tx         ),
-    .uart_rx_i        ( 1'b0            ),
+    .uart_tx_o        ( uart_tx_int         ),
+    .uart_rx_i        ( 1'b0                ),
 
     // I2C Interface
-    .i2c_sda_o        ( i2c_sda_out     ),
-    .i2c_sda_i        ( i2c_sda_in      ),
-    .i2c_sda_en_o     ( i2c_sda_oe      ),
-    .i2c_scl_o        ( i2c_scl_out     ),
-    .i2c_scl_i        ( i2c_scl_in      ),
-    .i2c_scl_en_o     ( i2c_scl_oe      ),
+    .i2c_sda_o        ( i2c_sda_out_int     ),
+    .i2c_sda_i        ( i2c_sda_in_int      ),
+    .i2c_sda_en_o     ( i2c_sda_en_int      ),
+    .i2c_scl_o        ( i2c_scl_out_int     ),
+    .i2c_scl_i        ( i2c_scl_in_int      ),
+    .i2c_scl_en_o     ( i2c_scl_en_int      ),
 
     // SPI Host Interface
-    .spim_sck_o       ( spi_sck_soc_out ),
-    .spim_sck_en_o    ( spi_sck_en      ),
-    .spim_csb_o       ( spi_cs_soc_out  ),
-    .spim_csb_en_o    ( spi_cs_en       ),
-    .spim_sd_o        ( spi_sd_soc_out  ),
-    .spim_sd_en_o     ( spi_sd_en       ),
-    .spim_sd_i        ( spi_sd_soc_in   ),
+    .spim_sck_o       ( spim_sck_int         ),
+    .spim_sck_en_o    ( spim_sck_en_int      ),
+    .spim_csb_o       ( spim_csb_int         ),
+    .spim_csb_en_o    ( spim_csb_en_int      ),
+    .spim_sd_o        ( spim_sd_out_int      ),
+    .spim_sd_en_o     ( spim_sd_en_int       ),
+    .spim_sd_i        ( spim_sd_in_int       ),
 
     // CLINT
-    .rtc_i            ( clk_rtc         ),
+    .rtc_i            ( ref_clk_int          ),
 
     // CLK locked signal
-    .clk_locked_i     ( 1'b0            ),
+    .clk_locked_i     ( 1'b0                 ),
 
     // External Regbus
-    .external_reg_req_o ( external_reg_req ),
-    .external_reg_rsp_i ( external_reg_rsp )
+    .external_reg_req_o ( external_reg_req   ),
+    .external_reg_rsp_i ( external_reg_rsp   )
+  );
+
+
+  //////////////
+  // Padframe //
+  //////////////
+
+  // Static connections SoC -> Padframe
+  static_connection_signals_soc2pad_t static_soc2pad;
+
+  assign static_soc2pad.main.ddr_link_clk_out_c2p = ddr_link_clk_out_int;
+  assign static_soc2pad.main.ddr_link_out0_c2p    = ddr_link_out_int[0];
+  assign static_soc2pad.main.ddr_link_out1_c2p    = ddr_link_out_int[1];
+  assign static_soc2pad.main.ddr_link_out2_c2p    = ddr_link_out_int[2];
+  assign static_soc2pad.main.ddr_link_out3_c2p    = ddr_link_out_int[3];
+
+  assign static_soc2pad.main.i2c_scl_c2p    = i2c_scl_out_int;
+  assign static_soc2pad.main.i2c_scl_en_c2p = i2c_scl_en_int;
+  assign static_soc2pad.main.i2c_sda_c2p    = i2c_sda_out_int;
+  assign static_soc2pad.main.i2c_sda_en_c2p = i2c_sda_en_int;
+
+  assign static_soc2pad.main.jtag_tdo_c2p   = jtag_tdo_int;
+
+  // RPC stubbed currently
+  assign static_soc2pad.main.rpc_clk_c2p   = '0;
+  assign static_soc2pad.main.rpc_clk_n_c2p = '1;
+  assign static_soc2pad.main.rpc_cs_n_c2p  = '1;
+
+  assign static_soc2pad.main.rpc_db0_c2p   = '0;
+  assign static_soc2pad.main.rpc_db1_c2p   = '0;
+  assign static_soc2pad.main.rpc_db2_c2p   = '0;
+  assign static_soc2pad.main.rpc_db3_c2p   = '0;
+  assign static_soc2pad.main.rpc_db4_c2p   = '0;
+  assign static_soc2pad.main.rpc_db5_c2p   = '0;
+  assign static_soc2pad.main.rpc_db6_c2p   = '0;
+  assign static_soc2pad.main.rpc_db7_c2p   = '0;
+  assign static_soc2pad.main.rpc_db8_c2p   = '0;
+  assign static_soc2pad.main.rpc_db9_c2p   = '0;
+  assign static_soc2pad.main.rpc_db10_c2p  = '0;
+  assign static_soc2pad.main.rpc_db11_c2p  = '0;
+  assign static_soc2pad.main.rpc_db12_c2p  = '0;
+  assign static_soc2pad.main.rpc_db13_c2p  = '0;
+  assign static_soc2pad.main.rpc_db14_c2p  = '0;
+  assign static_soc2pad.main.rpc_db15_c2p  = '0;
+
+  assign static_soc2pad.main.rpc_db_ie_c2p = '0;
+  assign static_soc2pad.main.rpc_db_oe_c2p = '0;
+  assign static_soc2pad.main.rpc_db_pe_c2p = '0;
+
+  assign static_soc2pad.main.rpc_dqs_c2p    = '0;
+  assign static_soc2pad.main.rpc_dqs_n_c2p  = '0;
+  assign static_soc2pad.main.rpc_dqs_ie_c2p = '0;
+  assign static_soc2pad.main.rpc_dqs_oe_c2p = '0;
+  assign static_soc2pad.main.rpc_dqs_pe_c2p = '0;
+
+  assign static_soc2pad.main.rpc_stb_c2p = '0;
+
+  assign static_soc2pad.main.spim_csb0_c2p    = spim_csb_int[0];
+  assign static_soc2pad.main.spim_csb1_c2p    = spim_csb_int[1];
+  assign static_soc2pad.main.spim_csb_en0_c2p = spim_csb_en_int[0];
+  assign static_soc2pad.main.spim_csb_en1_c2p = spim_csb_en_int[1];
+  assign static_soc2pad.main.spim_sck_c2p     = spim_sck_int;
+  assign static_soc2pad.main.spim_sck_en_c2p  = spim_sck_en_int;
+  assign static_soc2pad.main.spim_sd0_c2p     = spim_sd_out_int[0];
+  assign static_soc2pad.main.spim_sd1_c2p     = spim_sd_out_int[1];
+  assign static_soc2pad.main.spim_sd2_c2p     = spim_sd_out_int[2];
+  assign static_soc2pad.main.spim_sd3_c2p     = spim_sd_out_int[3];
+  assign static_soc2pad.main.spim_sd_en0_c2p  = spim_sd_en_int[0];
+  assign static_soc2pad.main.spim_sd_en1_c2p  = spim_sd_en_int[1];
+  assign static_soc2pad.main.spim_sd_en2_c2p  = spim_sd_en_int[2];
+  assign static_soc2pad.main.spim_sd_en3_c2p  = spim_sd_en_int[3];
+
+  assign static_soc2pad.main.uart_tx_c2p = uart_tx_int;
+
+  assign static_soc2pad.main.vga_hsync_c2p = vga_hsync_int;
+  assign static_soc2pad.main.vga_vsync_c2p = vga_vsync_int;
+  assign static_soc2pad.main.vga_blue0_c2p = vga_blue_int[0];
+  assign static_soc2pad.main.vga_blue1_c2p = vga_blue_int[0];
+  assign static_soc2pad.main.vga_green0_c2p = vga_green_int[0];
+  assign static_soc2pad.main.vga_green1_c2p = vga_green_int[1];
+  assign static_soc2pad.main.vga_green2_c2p = vga_green_int[2];
+  assign static_soc2pad.main.vga_red0_c2p = vga_red_int[0];
+  assign static_soc2pad.main.vga_red1_c2p = vga_red_int[1];
+  assign static_soc2pad.main.vga_red2_c2p = vga_red_int[2];
+
+  // Static connections Padframe -> SoC
+  static_connection_signals_pad2soc_t static_pad2soc;
+
+  assign bootmode_int[0] = static_pad2soc.main.bootmode0_p2c;
+  assign bootmode_int[1] = static_pad2soc.main.bootmode1_p2c;
+
+  assign ddr_link_clk_in_int = static_pad2soc.main.ddr_link_clk_in_p2c;
+  assign ddr_link_in_int[0] = static_pad2soc.main.ddr_link_in0_p2c;
+  assign ddr_link_in_int[1] = static_pad2soc.main.ddr_link_in1_p2c;
+  assign ddr_link_in_int[2] = static_pad2soc.main.ddr_link_in2_p2c;
+  assign ddr_link_in_int[3] = static_pad2soc.main.ddr_link_in3_p2c;
+
+  assign i2c_scl_in_int = static_pad2soc.main.i2c_scl_p2c;
+  assign i2c_sda_in_int = static_pad2soc.main.i2c_sda_p2c;
+
+  assign jtag_tck_int = static_pad2soc.main.jtag_tck_p2c;
+  assign jtag_tdi_int = static_pad2soc.main.jtag_tdi_p2c;
+  assign jtag_tms_int = static_pad2soc.main.jtag_tms_p2c;
+  assign jtag_trst_n_int = static_pad2soc.main.jtag_trst_n_p2c;
+
+  assign core_clk_int = static_pad2soc.main.core_clk_p2c;
+  assign ref_clk_int = static_pad2soc.main.ref_clk_p2c;
+  assign reset_n_int = static_pad2soc.main.reset_n_p2c;
+
+  // RPC stubbed currently
+  /* assign rpc_db_in_int[0] = static_pad2soc.main.rpc_db0_p2c;
+  assign rpc_db_in_int[1] = static_pad2soc.main.rpc_db1_p2c;
+  assign rpc_db_in_int[2] = static_pad2soc.main.rpc_db2_p2c;
+  assign rpc_db_in_int[3] = static_pad2soc.main.rpc_db3_p2c;
+  assign rpc_db_in_int[4] = static_pad2soc.main.rpc_db4_p2c;
+  assign rpc_db_in_int[5] = static_pad2soc.main.rpc_db5_p2c;
+  assign rpc_db_in_int[6] = static_pad2soc.main.rpc_db6_p2c;
+  assign rpc_db_in_int[7] = static_pad2soc.main.rpc_db7_p2c;
+  assign rpc_db_in_int[8] = static_pad2soc.main.rpc_db8_p2c;
+  assign rpc_db_in_int[9] = static_pad2soc.main.rpc_db9_p2c;
+  assign rpc_db_in_int[10] = static_pad2soc.main.rpc_db10_p2c;
+  assign rpc_db_in_int[11] = static_pad2soc.main.rpc_db11_p2c;
+  assign rpc_db_in_int[12] = static_pad2soc.main.rpc_db12_p2c;
+  assign rpc_db_in_int[13] = static_pad2soc.main.rpc_db13_p2c;
+  assign rpc_db_in_int[14] = static_pad2soc.main.rpc_db14_p2c;
+  assign rpc_db_in_int[15] = static_pad2soc.main.rpc_db15_p2c;
+
+  assign rpc_dqs_in_int = static_pad2soc.main.rpc_dqs_p2c;
+  assign rpc_dqs_n_in_int = static_pad2soc.main.rpc_dqs_n_p2c; */
+
+  assign spim_sd_in_int[0] = static_pad2soc.main.spim_sd0_p2c;
+  assign spim_sd_in_int[1] = static_pad2soc.main.spim_sd1_p2c;
+  assign spim_sd_in_int[2] = static_pad2soc.main.spim_sd2_p2c;
+  assign spim_sd_in_int[3] = static_pad2soc.main.spim_sd3_p2c;
+
+  assign testmode_int = static_pad2soc.main.testmode_p2c;
+
+  assign uart_rx_int = static_pad2soc.main.uart_rx_p2c;
+
+
+  // Logic to wire conversion for padframe
+
+  wire clk_sys_wire;
+  wire clk_rtc_wire;
+  wire rst_n_wire;
+  wire testmode_wire;
+  wire bootmode0_wire;
+  wire bootmode1_wire;
+
+  assign clk_sys_wire = clk_sys;
+  assign clk_rtc_wire = clk_rtc;
+  assign rst_n_wire = rst_n;
+  assign testmode_wire = testmode;
+  assign bootmode0_wire = bootmode[0];
+  assign bootmode0_wire = bootmode[1];
+
+  wire jtag_tck_wire;
+  wire jtag_trst_n_wire;
+  wire jtag_tms_wire;
+  wire jtag_tdi_wire;
+  wire jtag_tdo_wire;
+
+  assign jtag_tck_wire = jtag_tck;
+  assign jtag_trst_n_wire = jtag_trst_n;
+  assign jtag_tms_wire = jtag_tms;
+  assign jtag_tdi_wire = jtag_tdi;
+  assign jtag_tdo = jtag_tdo_wire;
+
+  wire uart_rx_wire;
+  wire uart_tx_wire;
+
+  assign uart_rx_wire = 1'b0;
+  assign uart_tx = uart_tx_wire;
+
+  wire spim_sd2_wire;
+  wire spim_sd3_wire;
+
+  assign spim_sd2_wire = 1'b0;
+  assign spim_sd3_wire = 1'b0;
+
+  wire sl_ddr_clk_i_wire;
+  wire sl_ddr_clk_o_wire;
+  wire sl_ddr_data0_i_wire;
+  wire sl_ddr_data1_i_wire;
+  wire sl_ddr_data2_i_wire;
+  wire sl_ddr_data3_i_wire;
+  wire sl_ddr_data0_o_wire;
+  wire sl_ddr_data1_o_wire;
+  wire sl_ddr_data2_o_wire;
+  wire sl_ddr_data3_o_wire;
+
+  assign sl_ddr_clk_i_wire = sl_ddr_clk_i;
+  assign sl_ddr_clk_o = sl_ddr_clk_o_wire;
+  assign sl_ddr_data0_i_wire = sl_ddr_data_i[0];
+  assign sl_ddr_data1_i_wire = sl_ddr_data_i[1];
+  assign sl_ddr_data2_i_wire = sl_ddr_data_i[2];
+  assign sl_ddr_data3_i_wire = sl_ddr_data_i[3];
+  assign sl_ddr_data_o[0] = sl_ddr_data0_o_wire;
+  assign sl_ddr_data_o[1] = sl_ddr_data1_o_wire;
+  assign sl_ddr_data_o[2] = sl_ddr_data2_o_wire;
+  assign sl_ddr_data_o[3] = sl_ddr_data3_o_wire;
+
+  wire rpc_dqs_wire;
+  wire rpc_dqs_n_wire;
+  wire rpc_db0_wire;
+  wire rpc_db1_wire;
+  wire rpc_db2_wire;
+  wire rpc_db3_wire;
+  wire rpc_db4_wire;
+  wire rpc_db5_wire;
+  wire rpc_db6_wire;
+  wire rpc_db7_wire;
+  wire rpc_db8_wire;
+  wire rpc_db9_wire;
+  wire rpc_db10_wire;
+  wire rpc_db11_wire;
+  wire rpc_db12_wire;
+  wire rpc_db13_wire;
+  wire rpc_db14_wire;
+  wire rpc_db15_wire;
+
+  assign rpc_dqs_wire = 1'b0;
+  assign rpc_dqs_n_wire = 1'b0;
+  assign rpc_db0_wire = 1'b0;
+  assign rpc_db1_wire = 1'b0;
+  assign rpc_db2_wire = 1'b0;
+  assign rpc_db3_wire = 1'b0;
+  assign rpc_db4_wire = 1'b0;
+  assign rpc_db5_wire = 1'b0;
+  assign rpc_db6_wire = 1'b0;
+  assign rpc_db7_wire = 1'b0;
+  assign rpc_db8_wire = 1'b0;
+  assign rpc_db9_wire = 1'b0;
+  assign rpc_db10_wire = 1'b0;
+  assign rpc_db11_wire = 1'b0;
+  assign rpc_db12_wire = 1'b0;
+  assign rpc_db13_wire = 1'b0;
+  assign rpc_db14_wire = 1'b0;
+  assign rpc_db15_wire = 1'b0;
+
+
+  cheshire_padframe_sim #(
+    .AW     ( 48                ),
+    .DW     ( 32                ),
+    .req_t  ( reg_a48_d32_req_t ),
+    .resp_t ( reg_a48_d32_rsp_t )
+  ) i_cheshire_padframe_sim (
+    .clk_i  ( core_clk_int      ),
+    .rst_ni ( reset_n_int       ),
+    .static_connection_signals_pad2soc ( static_pad2soc ),
+    .static_connection_signals_soc2pad ( static_soc2pad ),
+    // Landing Pads
+    .pad_main_core_clk_pad    ( clk_sys_wire     ),
+    .pad_main_ref_clk_pad     ( clk_rtc_wire     ),
+    .pad_main_reset_n_pad     ( rst_n_wire       ),
+    .pad_main_testmode_pad    ( testmode_wire    ),
+    .pad_main_bootmode0_pad   ( bootmode0_wire   ),
+    .pad_main_bootmode1_pad   ( bootmode1_wire   ),
+    .pad_main_jtag_tck_pad    ( jtag_tck_wire    ),
+    .pad_main_jtag_trst_n_pad ( jtag_trst_n_wire ),
+    .pad_main_jtag_tms_pad    ( jtag_tms_wire    ),
+    .pad_main_jtag_tdi_pad    ( jtag_tdi_wire    ),
+    .pad_main_jtag_tdo_pad    ( jtag_tdo_wire    ),
+    .pad_main_uart_rx_pad     ( uart_rx_wire     ),
+    .pad_main_uart_tx_pad     ( uart_tx_wire     ),
+    .pad_main_spim_sck_pad    ( spi_sck     ),
+    .pad_main_spim_csb0_pad   (             ), // SD Card
+    .pad_main_spim_csb1_pad   ( spi_cs      ),
+    .pad_main_spim_sd0_pad    ( spi_io[0]   ),
+    .pad_main_spim_sd1_pad    ( spi_io[1]   ),
+    .pad_main_spim_sd2_pad    ( spim_sd2_wire ),
+    .pad_main_spim_sd3_pad    ( spim_sd3_wire ),
+    .pad_main_i2c_scl_pad     ( i2c_scl     ),
+    .pad_main_i2c_sda_pad     ( i2c_sda     ),
+    .pad_main_ddr_link_clk_in_pad  ( sl_ddr_clk_i_wire     ),
+    .pad_main_ddr_link_clk_out_pad ( sl_ddr_clk_o_wire     ),
+    .pad_main_ddr_link_in0_pad     ( sl_ddr_data0_i_wire ),
+    .pad_main_ddr_link_in1_pad     ( sl_ddr_data1_i_wire ),
+    .pad_main_ddr_link_in2_pad     ( sl_ddr_data2_i_wire ),
+    .pad_main_ddr_link_in3_pad     ( sl_ddr_data3_i_wire ),
+    .pad_main_ddr_link_out0_pad    ( sl_ddr_data0_o_wire ),
+    .pad_main_ddr_link_out1_pad    ( sl_ddr_data1_o_wire ),
+    .pad_main_ddr_link_out2_pad    ( sl_ddr_data2_o_wire ),
+    .pad_main_ddr_link_out3_pad    ( sl_ddr_data3_o_wire ),
+    .pad_main_vga_hsync_pad   (    ),
+    .pad_main_vga_vsync_pad   (    ),
+    .pad_main_vga_red_0_pad   (    ),
+    .pad_main_vga_red_1_pad   (    ),
+    .pad_main_vga_red_2_pad   (    ),
+    .pad_main_vga_green_0_pad (    ),
+    .pad_main_vga_green_1_pad (    ),
+    .pad_main_vga_green_2_pad (    ),
+    .pad_main_vga_blue_0_pad  (    ),
+    .pad_main_vga_blue_1_pad  (    ),
+    .pad_main_rpc_clk_pad   (      ),
+    .pad_main_rpc_clk_n_pad (      ),
+    .pad_main_rpc_cs_n_pad  (      ),
+    .pad_main_rpc_stb_pad   (      ),
+    .pad_main_rpc_dqs_pad   ( rpc_dqs_wire ),
+    .pad_main_rpc_dqs_n_pad ( rpc_dqs_n_wire ),
+    .pad_main_rpc_db0_pad   ( rpc_db0_wire ),
+    .pad_main_rpc_db1_pad   ( rpc_db1_wire ),
+    .pad_main_rpc_db2_pad   ( rpc_db2_wire ),
+    .pad_main_rpc_db3_pad   ( rpc_db3_wire ),
+    .pad_main_rpc_db4_pad   ( rpc_db4_wire ),
+    .pad_main_rpc_db5_pad   ( rpc_db5_wire ),
+    .pad_main_rpc_db6_pad   ( rpc_db6_wire ),
+    .pad_main_rpc_db7_pad   ( rpc_db7_wire ),
+    .pad_main_rpc_db8_pad   ( rpc_db8_wire ),
+    .pad_main_rpc_db9_pad   ( rpc_db9_wire ),
+    .pad_main_rpc_db10_pad  ( rpc_db10_wire ),
+    .pad_main_rpc_db11_pad  ( rpc_db11_wire ),
+    .pad_main_rpc_db12_pad  ( rpc_db12_wire ),
+    .pad_main_rpc_db13_pad  ( rpc_db13_wire ),
+    .pad_main_rpc_db14_pad  ( rpc_db14_wire ),
+    .pad_main_rpc_db15_pad  ( rpc_db15_wire ),
+    // Config Interface
+    .config_req_i ( external_reg_req ),
+    .config_rsp_o ( external_reg_rsp )
   );
 
 endmodule

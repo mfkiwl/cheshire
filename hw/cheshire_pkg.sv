@@ -255,9 +255,9 @@ package cheshire_pkg;
     SerialLink:     1'b1,
     Dram:           1'b1,
     Vga:            1'b1,
-    VgaRedWidth:    32'd2,
+    VgaRedWidth:    32'd3,
     VgaGreenWidth:  32'd3,
-    VgaBlueWidth:   32'd3,
+    VgaBlueWidth:   32'd2,
     ResetFreq:      32'd200000000
   };
 

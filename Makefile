@@ -7,6 +7,7 @@
 # Paul Scheffler <paulsc@iis.ee.ethz.ch>
 
 BENDER      ?= bender
+PADRICK     ?= padrick
 PYTHON3     ?= python3
 REGGEN      ?= $(PYTHON3) $(shell $(BENDER) path register_interface)/vendor/lowrisc_opentitan/util/regtool.py
 
@@ -69,11 +70,20 @@ $(shell $(BENDER) path serial_link)/.generated: hw/serial_link.hjson
 	$(MAKE) -C $(shell $(BENDER) path serial_link) update-regs
 	touch $@
 
+# Simulation Padframe
+PF_SIM_SRCS  = $(wildcard hw/padframe/sim/src/*cheshire_padframe_sim*) hw/padframe/sim/Bender.yml
+PF_SIM_SRCS += hw/padframe/sim/ips_list.yml hw/padframe/sim/src_files.yml hw/padframe/sim/cheshire_padframe_sim.csv
+
+$(PF_SIM_SRCS): hw/padframe/sim/cheshire_padframe_sim.yaml target/sim/src/func_pad.sv
+	$(PADRICK) generate rtl --output hw/padframe/sim/ $<
+	$(PADRICK) generate padlist --output hw/padframe/sim $<
+
 hw-all: hw/regs/cheshire_reg_pkg.sv hw/regs/cheshire_reg_top.sv
 hw-all: $(shell $(BENDER) path clint)/.generated
 hw-all: $(shell $(BENDER) path opentitan_peripherals)/.generated
 hw-all: $(shell $(BENDER) path axi_vga)/.generated
 hw-all: $(shell $(BENDER) path serial_link)/.generated
+hw-all: $(PF_SIM_SRCS)
 
 #####################
 # Generate Boot ROM #
@@ -97,7 +107,7 @@ bootrom-all: hw/bootrom/cheshire_bootrom.sv
 # Simulation #
 ##############
 
-target/sim/vsim/compile.cheshire_soc.tcl: Bender.yml
+target/sim/vsim/compile.cheshire.tcl: Bender.yml
 	$(BENDER) script vsim -t sim -t cv64a6_imafdc_sv39 -t test -t cva6 --vlog-arg="$(VLOG_ARGS)" > $@
 	echo 'vlog "$(CURDIR)/target/sim/src/elfloader.cpp" -ccflags "-std=c++11"' >> $@
 
@@ -122,7 +132,7 @@ target/sim/models/uart_tb_rx.sv: Bender.yml | target/sim/models
 sim-all: target/sim/models/s25fs512s.sv
 sim-all: target/sim/models/24FC1025.v
 sim-all: target/sim/models/uart_tb_rx.sv
-sim-all: target/sim/vsim/compile.cheshire_soc.tcl
+sim-all: target/sim/vsim/compile.cheshire.tcl
 
 #############
 # FPGA Flow #
