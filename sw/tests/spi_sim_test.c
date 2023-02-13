@@ -18,14 +18,14 @@ extern void *__base_spim;
 void __attribute__((aligned(4))) trap_vector(void) { test_trap_vector(&uart_initialized); }
 
 int main(void) {
-    opentitan_qspi_t spi;
+    opentitan_qspi_t spi = {0};
 
     char txbuf[5] = {0};
     char rxbuf[8] = {0};
     txbuf[0] = 0x13;
     txbuf[1] = 0x00;
     txbuf[2] = 0x00;
-    txbuf[3] = 0x50;
+    txbuf[3] = 0x00;
     txbuf[4] = 0x00;
 
     init_uart(200000000, 115200);

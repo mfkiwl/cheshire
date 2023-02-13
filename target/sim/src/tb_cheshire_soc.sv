@@ -43,7 +43,7 @@ module tb_cheshire_soc;
     fix.jtag_cfg_llc_spm();
 
     // Randomize the SPM
-    //fix.sl_rand(cheshire_pkg::SpmBase + 48'h0000_5000, 64'h0000_1000);
+    fix.sl_rand(cheshire_pkg::SpmBase + 48'h0000_5000, 64'h0000_1000);
 
     fix.sl_preload();
 

@@ -18,6 +18,53 @@ _start:
     la gp, __global_pointer$
     .option pop
 
+    csrrw t0, misa, x0
+    andi t1, t0, 40         // D and F extension?
+    andi t0, t0, 8          // Only F extension?
+    addi t1, t1, -40
+    bnez t1, _clear_s_fprs  // No D+F extension combo
+    li t1, 1
+    slli t1, t1, 13
+    csrrs x0, mstatus, t1   // Set FS state to "Initial"
+
+    // Clear all 32 double FP registers
+    fcvt.d.l f0, x0
+    fcvt.d.l f1, x0
+    fcvt.d.l f2, x0
+    fcvt.d.l f3, x0
+    fcvt.d.l f4, x0
+    fcvt.d.l f5, x0
+    fcvt.d.l f6, x0
+    fcvt.d.l f7, x0
+    fcvt.d.l f8, x0
+    fcvt.d.l f9, x0
+    fcvt.d.l f10, x0
+    fcvt.d.l f11, x0
+    fcvt.d.l f12, x0
+    fcvt.d.l f13, x0
+    fcvt.d.l f14, x0
+    fcvt.d.l f15, x0
+    fcvt.d.l f16, x0
+    fcvt.d.l f17, x0
+    fcvt.d.l f18, x0
+    fcvt.d.l f19, x0
+    fcvt.d.l f20, x0
+    fcvt.d.l f21, x0
+    fcvt.d.l f22, x0
+    fcvt.d.l f23, x0
+    fcvt.d.l f24, x0
+    fcvt.d.l f25, x0
+    fcvt.d.l f26, x0
+    fcvt.d.l f27, x0
+    fcvt.d.l f28, x0
+    fcvt.d.l f29, x0
+    fcvt.d.l f30, x0
+    fcvt.d.l f31, x0
+
+    csrrc x0, mstatus, t1   // Set FS state to "Clean"
+
+_clear_int_gprs:
+
     // Reset all GPRs
     li x1, 0
     li x4, 0
@@ -66,6 +113,52 @@ _start:
 
     // Main returned - save return value and mark as done
     j _exit
+
+// The unlikely path is moved out of the way
+_clear_s_fprs:
+    beq t0, x0, _clear_int_gprs // t0 = misa & 0x8 ==> No F extension if t0 == 0
+
+    li t1, 1
+    slli t1, t1, 13
+    csrrs x0, mstatus, t1   // Set FS state to "Initial"
+
+    // Clear all 32 single FP registers
+    fcvt.s.l f0, x0
+    fcvt.s.l f1, x0
+    fcvt.s.l f2, x0
+    fcvt.s.l f3, x0
+    fcvt.s.l f4, x0
+    fcvt.s.l f5, x0
+    fcvt.s.l f6, x0
+    fcvt.s.l f7, x0
+    fcvt.s.l f8, x0
+    fcvt.s.l f9, x0
+    fcvt.s.l f10, x0
+    fcvt.s.l f11, x0
+    fcvt.s.l f12, x0
+    fcvt.s.l f13, x0
+    fcvt.s.l f14, x0
+    fcvt.s.l f15, x0
+    fcvt.s.l f16, x0
+    fcvt.s.l f17, x0
+    fcvt.s.l f18, x0
+    fcvt.s.l f19, x0
+    fcvt.s.l f20, x0
+    fcvt.s.l f21, x0
+    fcvt.s.l f22, x0
+    fcvt.s.l f23, x0
+    fcvt.s.l f24, x0
+    fcvt.s.l f25, x0
+    fcvt.s.l f26, x0
+    fcvt.s.l f27, x0
+    fcvt.s.l f28, x0
+    fcvt.s.l f29, x0
+    fcvt.s.l f30, x0
+    fcvt.s.l f31, x0
+
+    csrrc x0, mstatus, t1   // Set FS state to "Clean"
+
+    j _clear_int_gprs
 
 // If main returns we end up here
 // Save the return value to the scratch register 0

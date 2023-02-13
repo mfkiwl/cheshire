@@ -9,7 +9,7 @@ ENTRY(_start)
 
 MEMORY
 {
-  bootrom (rx)  : ORIGIN = 0x01000000, LENGTH = 4K
+  bootrom (rx)  : ORIGIN = 0x01000000, LENGTH = 12K
   spm (rwx)     : ORIGIN = 0x70000000, LENGTH = 24K
 }
 
@@ -33,7 +33,7 @@ SECTIONS
   /DISCARD/ : { *(.riscv.attributes) *(.comment) }
   /* Global and stack pointer */
   __global_pointer$ = ADDR(.misc) + SIZEOF(.misc) / 2;
-  __stack_pointer$  = ORIGIN(spm) + LENGTH(spm) - 8;
+  __stack_pointer$  = ORIGIN(spm) + LENGTH(spm);
   /* Further addresses */
   __base_bootrom        = 0x01000000;
   __base_cheshire_regs  = 0x02000000;

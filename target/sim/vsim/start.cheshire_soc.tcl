@@ -10,7 +10,8 @@ if {![info exists BINARY]} {
     set BINARY ""
 }
 
-vsim tb_cheshire_soc -t 1ps -voptargs=+acc +BINARY=$BINARY -permissive -suppress 3009
+#vsim tb_cheshire_soc -t 1ps -voptargs=+acc +BINARY=$BINARY -permissive -suppress 3009
+vsim tb_cheshire_soc -t 100ps -vopt -vopt_verbose -voptargs=+noacc -voptargs=+acc+s25fs512s -voptargs=+acc+stream_xbar -voptargs=+acc+uart_tb_rx -voptargs=-O5 -voptargs=-nofsmdebug -voptargs=+nocover +BINARY=$BINARY -permissive -suppress 3009
 
 set StdArithNoWarnings 1
 set NumericStdNoWarnings 1
